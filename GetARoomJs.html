@@ -1,0 +1,300 @@
+<script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script>
+<script>
+
+const lastReq = {};
+
+$(function() {
+  PullToRefresh.init({
+    mainElement: '[data-calendars]',
+    triggerElement: '[data-calendars]',
+    onRefresh: onPullRefresh,
+    instructionsPullToRefresh: 'Tirer vers le bas pour rafraîchir',
+    instructionsReleaseToRefresh: 'Relâcher pour rafraîchir',
+    instructionsRefreshing: '...',
+    refreshTimeout: 1
+  });
+
+  const dateField = $('[data-search-date]'),
+        timeField = $('[data-search-time]');
+  let tzoffset = (new Date()).getTimezoneOffset() * 60000; //offset in milliseconds
+  let now = (new Date(Date.now() - tzoffset)).toISOString().slice(0,-1);
+  
+  dateField.val(now.slice(0, 10));
+  timeField.val(now.slice(11, 16));
+  
+  doSearch();
+  
+  $('[data-do-search]').click(function() {
+    doSearch();
+  });
+  
+  $('[data-do-resa]').click(function() {
+    doReservation();
+  });
+  
+  $('[data-popin-close]').click(function() {
+    closeReservationPopin();
+  });
+  
+  $('[data-resa-heure-debut]').on('change', function() {
+    updateDureeResa();
+  });
+  $('[data-resa-heure-fin]').on('change', function() {
+    updateDureeResa();
+  });
+  
+  $('[data-message]').click(function() {
+    $(this).hide(250);
+  });
+});
+
+function doSearch() {
+
+  $('[data-section-loading]').show();
+  $('[data-calendars]').hide();
+
+  const dateField = $('[data-search-date]'),
+        timeField = $('[data-search-time]');
+        
+  lastReq.date = dateField.val();
+  lastReq.time = timeField.val();
+        
+  google.script.run
+      .withSuccessHandler(showData)
+      .withFailureHandler(onLoadDataError)
+      .afficherDispo(dateField.val() + 'T' + timeField.val() + 'Z');
+}
+
+function doReservation() {
+  const $popin = $('[data-popin-reserver]');
+  const roomName = $popin.find('[data-resa-room-name]').html();
+// TODO s'assurer de la reservabilité à date de fin avec 'jusque'
+  
+  gtag('event', 'do_resa', {
+    'roomName' : roomName,
+    'event_label' : roomName
+  });
+  
+  google.script.run
+    .withSuccessHandler(onSalleReservee)
+    .withFailureHandler(onReservationError)
+    .reserver(
+        $popin.find('[data-do-resa]').attr('data-calId'),
+        roomName,
+        $popin.find('[data-resa-date]').html(),
+        $popin.find('[data-resa-heure-debut]').val(),
+        $popin.find('[data-resa-heure-fin]').val(),
+        $popin.find('[data-resa-objet]').val()
+    );
+}
+
+function onPullRefresh(done) {
+  done(); // end pull to refresh
+  
+  const dateField = $('[data-search-date]'),
+        timeField = $('[data-search-time]');
+        
+  const date = dateField.val(),
+        time = timeField.val().split(':');
+  
+  const tzoffset = (new Date()).getTimezoneOffset() * 60000; //offset in milliseconds
+  const now = (new Date(Date.now() - tzoffset)).toISOString().slice(0,-1);
+  const aujStr = now.slice(0, 10);
+  if (aujStr == date) {
+    const timeNow = now.slice(11, 16).split(':');
+    
+    if (time[0] < timeNow[0] || (time[0] == timeNow[0] && time[1] < timeNow[1])) {
+      timeField.val(now.slice(11, 16));
+    }
+  }
+  
+  doSearch();
+}
+
+function showData(res) {
+  $('[data-section-loading]').hide();
+  $('[data-calendars]').show();
+  
+  const $freeCalendars = $('[data-liste-calendars]');
+  $freeCalendars.empty();
+  if (res.free.length == 0) {
+    $freeCalendars.append('<span>Aucune salle disponible !</span>');
+  } else {
+    res.free.sort(function(a, b) {
+      const as = a[4].split(':');
+      const bs = b[4].split(':');
+      
+      if (as[0] > bs[0] || (as[0] == bs[0] && as[1] > bs[1])) {
+        return 1;
+      } else if (as[0] == bs[0] && as[1] == bs[1]) {
+        return a[0] < b[0] ? -1 : (a[0] == b[0] ? 0 : 1);
+      } else {
+        return -1;
+      }
+    });
+  
+    for (let i in res.free) {
+      const cal = res.free[i];
+      $freeCalendars.append(
+      `<div class="card type-${cal[3]}">
+          <span><span data-calId="${cal[1]}" class="nom-salle">${cal[0]}</span><br/>jusque ${cal[4]}</span>
+          <img data-add-to-cal src="data:image/svg+xml;utf8;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iaXNvLTg4NTktMSI/Pgo8IS0tIEdlbmVyYXRvcjogQWRvYmUgSWxsdXN0cmF0b3IgMTYuMC4wLCBTVkcgRXhwb3J0IFBsdWctSW4gLiBTVkcgVmVyc2lvbjogNi4wMCBCdWlsZCAwKSAgLS0+CjwhRE9DVFlQRSBzdmcgUFVCTElDICItLy9XM0MvL0RURCBTVkcgMS4xLy9FTiIgImh0dHA6Ly93d3cudzMub3JnL0dyYXBoaWNzL1NWRy8xLjEvRFREL3N2ZzExLmR0ZCI+CjxzdmcgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB4bWxuczp4bGluaz0iaHR0cDovL3d3dy53My5vcmcvMTk5OS94bGluayIgdmVyc2lvbj0iMS4xIiBpZD0iQ2FwYV8xIiB4PSIwcHgiIHk9IjBweCIgd2lkdGg9IjMycHgiIGhlaWdodD0iMzJweCIgdmlld0JveD0iMCAwIDQ4NS4yMTMgNDg1LjIxMiIgc3R5bGU9ImVuYWJsZS1iYWNrZ3JvdW5kOm5ldyAwIDAgNDg1LjIxMyA0ODUuMjEyOyIgeG1sOnNwYWNlPSJwcmVzZXJ2ZSI+CjxnPgoJPHBhdGggZD0iTTYwLjY1Miw3NS44MTZWMTUuMTYzQzYwLjY1Miw2Ljc4MSw2Ny40MzMsMCw3NS44MTcsMGM4LjM4LDAsMTUuMTYxLDYuNzgxLDE1LjE2MSwxNS4xNjN2NjAuNjUzICAgYzAsOC4zOC02Ljc4MSwxNS4xNjEtMTUuMTYxLDE1LjE2MUM2Ny40MzMsOTAuOTc4LDYwLjY1Miw4NC4xOTYsNjAuNjUyLDc1LjgxNnogTTMxOC40MjQsOTAuOTc4ICAgYzguMzc4LDAsMTUuMTYzLTYuNzgxLDE1LjE2My0xNS4xNjFWMTUuMTYzQzMzMy41ODcsNi43ODEsMzI2LjgwMiwwLDMxOC40MjQsMGMtOC4zODIsMC0xNS4xNjgsNi43ODEtMTUuMTY4LDE1LjE2M3Y2MC42NTMgICBDMzAzLjI1Niw4NC4xOTYsMzEwLjA0Miw5MC45NzgsMzE4LjQyNCw5MC45Nzh6IE00ODUuMjEyLDM2My45MDZjMCw2Ni45OTYtNTQuMzEyLDEyMS4zMDctMTIxLjMwMywxMjEuMzA3ICAgYy02Ni45ODYsMC0xMjEuMzAyLTU0LjMxMS0xMjEuMzAyLTEyMS4zMDdjMC02Ni45ODYsNTQuMzE1LTEyMS4zLDEyMS4zMDItMTIxLjNDNDMwLjksMjQyLjYwNiw0ODUuMjEyLDI5Ni45MTksNDg1LjIxMiwzNjMuOTA2eiAgICBNNDU0Ljg5LDM2My45MDZjMC01MC4xNjEtNDAuODEtOTAuOTc2LTkwLjk4LTkwLjk3NmMtNTAuMTY2LDAtOTAuOTc2LDQwLjgxNC05MC45NzYsOTAuOTc2YzAsNTAuMTcxLDQwLjgxLDkwLjk4LDkwLjk3Niw5MC45OCAgIEM0MTQuMDgsNDU0Ljg4Niw0NTQuODksNDE0LjA3Nyw0NTQuODksMzYzLjkwNnogTTEyMS4zMDUsMTgxLjk1NUg2MC42NTJ2NjAuNjUxaDYwLjY1M1YxODEuOTU1eiBNNjAuNjUyLDMzMy41ODRoNjAuNjUzVjI3Mi45MyAgIEg2MC42NTJWMzMzLjU4NHogTTE1MS42MjksMjQyLjYwNmg2MC42NTR2LTYwLjY1MWgtNjAuNjU0VjI0Mi42MDZ6IE0xNTEuNjI5LDMzMy41ODRoNjAuNjU0VjI3Mi45M2gtNjAuNjU0VjMzMy41ODR6ICAgIE0zMC4zMjgsMzYwLjg5MVYxNTEuNjI4aDMzMy41ODJ2NjAuNjUzaDMwLjMyN1Y5NGMwLTE4LjQyMS0xNC42OTItMzMuMzQ5LTMyLjg0My0zMy4zNDloLTEyLjY0N3YxNS4xNjYgICBjMCwxNi43MDEtMTMuNTk2LDMwLjMyNS0zMC4zMjIsMzAuMzI1Yy0xNi43MzEsMC0zMC4zMjYtMTMuNjI0LTMwLjMyNi0zMC4zMjVWNjAuNjUxSDEwNi4xNHYxNS4xNjYgICBjMCwxNi43MDEtMTMuNTkzLDMwLjMyNS0zMC4zMjIsMzAuMzI1Yy0xNi43MzMsMC0zMC4zMjctMTMuNjI0LTMwLjMyNy0zMC4zMjVWNjAuNjUxSDMyLjg1OUMxNC43MDcsNjAuNjUxLDAuMDAxLDc1LjU3OSwwLjAwMSw5NCAgIHYyNjYuODkyYzAsMTguMzYsMTQuNzA2LDMzLjM0NiwzMi44NTgsMzMuMzQ2aDE3OS40MjR2LTMwLjMzMUgzMi44NTlDMzEuNDg1LDM2My45MDYsMzAuMzI4LDM2Mi40ODcsMzAuMzI4LDM2MC44OTF6ICAgIE0zMDMuMjU2LDI0Mi42MDZ2LTYwLjY1MWgtNjAuNjQ4djYwLjY1MUgzMDMuMjU2eiBNNDI4LjIzMSwzMzQuMzU5Yy01LjkyMy01LjkyOC0xNS41MTktNS45MjgtMjEuNDM3LDBsLTUzLjYwMiw1My42MDIgICBsLTMyLjE3LTMyLjE2NmMtNS45MjMtNS45MjMtMTUuNTE4LTUuOTIzLTIxLjQ0LDBzLTUuOTIzLDE1LjUxOSwwLDIxLjQ0bDQyLjg4Niw0Mi44ODZjMi45NTksMi45NTksNi44NDIsNC40MzgsMTAuNzI1LDQuNDM4ICAgYzMuODc0LDAsNy43NTMtMS40NzksMTAuNzE2LTQuNDM4bDY0LjMyMi02NC4zMjZDNDM0LjE1MywzNDkuODcyLDQzNC4xNTMsMzQwLjI4Miw0MjguMjMxLDMzNC4zNTl6IiBmaWxsPSIjRkZGRkZGIi8+CjwvZz4KPGc+CjwvZz4KPGc+CjwvZz4KPGc+CjwvZz4KPGc+CjwvZz4KPGc+CjwvZz4KPGc+CjwvZz4KPGc+CjwvZz4KPGc+CjwvZz4KPGc+CjwvZz4KPGc+CjwvZz4KPGc+CjwvZz4KPGc+CjwvZz4KPGc+CjwvZz4KPGc+CjwvZz4KPGc+CjwvZz4KPC9zdmc+Cg==" />
+       </div>`);
+    }
+    
+    $('[data-add-to-cal]').click(function() {
+      showReservationPopin(this);
+    });
+  }
+  
+  const $busyCalendars = $('[data-busy-calendars]');
+  $busyCalendars.empty();
+  if (res.busy.length == 0) {
+    $busyCalendars.append('<span>Aucune salle occupée !</span>');
+  } else {
+  
+    res.busy.sort(function(a, b) {
+      const as = a[5].split(':');
+      const bs = b[5].split(':');
+      
+      if (as[0] > bs[0] || (as[0] == bs[0] && as[1] > bs[1])) {
+        return 1;
+      } else if (as[0] == bs[0] && as[1] == bs[1]) {
+        return a[0] < b[0] ? -1 : (a[0] == b[0] ? 0 : 1);
+      } else {
+        return -1;
+      }
+    });
+    
+    for (let i in res.busy) {
+      const cal = res.busy[i];
+      
+      $busyCalendars.append(
+      `<div class="card type-${cal[3]}">
+          <span><span data-calId="${cal[1]}" class="nom-salle">${cal[0]}</span><br/>Libre de ${cal[5]} à ${cal[4]}</span>
+       </div>`);
+    }
+  }
+  
+  gtag('event', 'do_search', {});
+}
+
+function showReservationPopin(addToCalButton) {
+  $calId = $(addToCalButton).parent().find('[data-calId]');
+
+  const $popin = $('[data-popin-reserver]');
+  $popin.find('[data-resa-room-name]').html($calId.html());
+  
+  const date = lastReq.date.split('-');
+  $popin.find('[data-resa-date]').html(date[2] + '/' + date[1] + '/' + date[0]);
+  const heureDebut = lastReq.time;
+  const hmdebut = heureDebut.split(':');
+  const hDebut = new Date();
+  hDebut.setHours(+hmdebut[0]+1);
+  hDebut.setMinutes(hmdebut[1]);
+  $popin.find('[data-resa-heure-debut]').val(hDebut.toISOString().slice(0,-1).slice(11, 16));
+  
+  // init à +1h
+  var plusUneHeure = new Date();
+  // 10:14 -> 10:00 ; 10h16 -> 10h30 ; 10h46 -> 11h00
+  const minFin = +hmdebut[1];
+  if (minFin < 15) {
+    plusUneHeure.setHours(+hmdebut[0]+2);
+    plusUneHeure.setMinutes(0);
+  } else if (minFin < 45) {
+    plusUneHeure.setHours(+hmdebut[0]+2);
+    plusUneHeure.setMinutes(30);
+  } else {
+    plusUneHeure.setHours(+hmdebut[0]+3);
+    plusUneHeure.setMinutes(0);
+  }
+  $popin.find('[data-resa-heure-fin]').val(plusUneHeure.toISOString().slice(0,-1).slice(11, 16));
+  
+  $popin.find('[data-do-resa]').attr('data-calId', $calId.attr('data-calId'));
+  
+  $popin.find('[data-do-objet]').val('');
+  
+  updateDureeResa();
+  
+  $('body').addClass('no-scroll');
+  $popin.addClass("visible");
+}
+
+function updateDureeResa() {
+  const $popin = $('[data-popin-reserver]');
+  const hDebut = $popin.find('[data-resa-heure-debut]').val().split(':');
+  const hFin = $popin.find('[data-resa-heure-fin]').val().split(':');
+  const $duree = $popin.find('[data-resa-duree]');
+  $duree.empty();
+  
+  let diffEnMinutes = +hFin[0]*60 + +hFin[1] - (+hDebut[0]*60 + +hDebut[1]);
+  if (+hFin[0] < +hDebut[0]) diffEnMinutes += (24*60);
+  
+  const diffM = diffEnMinutes%60;
+  const diffH = (diffEnMinutes-diffM)/60;
+  let dureeAsTxt = '';
+  if (diffH == 0) {
+    dureeAsTxt += (diffM > 9 ? diffM : '0' + diffM) + 'min';
+  } else if (diffM == 0) {
+    dureeAsTxt += diffH + 'h';
+  } else {
+    dureeAsTxt += diffH + 'h' + (diffM > 9 ? diffM : '0' + diffM);
+  }
+  $duree.html(dureeAsTxt);
+}
+
+function closeReservationPopin() {
+  $('body').removeClass('no-scroll')
+  $('[data-popin-reserver]').removeClass("visible");
+}
+
+function onLoadDataError(e) {
+  showMessage('Erreur : ' + e, true)
+}
+
+function onReservationError(e) {
+  showMessage('Erreur : ' + e, true)
+  closeReservationPopin();
+  
+  const roomName = $('[data-popin-reserver]').find('[data-resa-room-name]').html();
+  
+  gtag('event', 'resa_KO', {
+    'roomName' : roomName,
+    'event_label' : roomName
+  });
+  
+  doSearch();
+}
+
+function showMessage(msg, isError) {
+  $msg = $('[data-message]');
+  $msg.empty();
+  if (isError) {
+    $msg.removeClass('success');
+    $msg.addClass('error');
+  } else {
+    $msg.removeClass('error');
+    $msg.addClass('success');
+  }
+  $msg.html(msg);
+  
+  $msg.show(250);
+  
+  setTimeout(function() {
+    $msg.hide(250);
+  }, 5000);
+}
+
+function onSalleReservee(res) {
+  console.log(res);
+  const roomName = $('[data-popin-reserver]').find('[data-resa-room-name]').html();
+  showMessage(`Salle ${roomName} reservée`, false)
+  closeReservationPopin();
+  
+  gtag('event', 'resa_ok', {
+    'roomName' : roomName,
+    'event_label' : roomName
+  });
+}
+
+</script>

@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <?!= include('GetARoomCss'); ?>
+  </head>
+  <body>
+    <header>
+      <section data-search class="search">
+        <span class="app-name">Get a room!!! @iRiS</span>
+        
+        <div class="search-form">
+          <!--<form onsubmit='doSearch(); return false;'>-->
+            <input data-search-date type="date">
+            <input data-search-time type="time" step="900">
+            <input data-do-search type="submit" value = "OK">
+          <!--</form>-->
+        </div>
+      </section>
+    </header>
+    
+    <section data-section-loading class="visually-hidden">
+      Chargement en cours ...
+    </section>
+    
+    <section data-calendars class="visually-hidden">
+      <h2>Salles disponibles :</h2>
+      <div data-liste-calendars class="free-calendars"></div>
+      
+      <h2>Salles occupées :</h2>
+      <div data-busy-calendars class="busy-calendars"></div>
+    </section>
+    
+    <div data-popin-reserver class="popin">
+      <div class="popin-wrapper">
+        <span data-popin-close class="close-btn"></span>
+        <div class="popin-content">
+          <div class="picto"></div>
+          <div>Réserver la salle<br/><span data-resa-room-name></span></div>
+          <div>Le <span data-resa-date></span></div>
+          <div>De <input data-resa-heure-debut type="time" step="900"> à <input data-resa-heure-fin type="time" step="900"> (<span data-resa-duree></span>)</div>
+          <div>Objet : <input data-resa-objet type="text"></div>
+          <div><input data-do-resa type="submit" value = "OK"></div>
+        </div>
+      </div>
+    </div>
+    
+    <div data-message class="message visually-hidden"></div>
+    
+    <div class="credits">Icons made by <a href="https://www.flaticon.com/authors/simpleicon" title="SimpleIcon">SimpleIcon</a> from <a href="https://www.flaticon.com/" title="Flaticon">www.flaticon.com</a> is licensed by <a href="http://creativecommons.org/licenses/by/3.0/" title="Creative Commons BY 3.0" target="_blank">CC 3.0 BY</a></div>
+    <?!= include('pullToRefresh.min.js'); ?>
+    <?!= include('GetARoomJs'); ?>
+    <?!= include("AnalyticsJs"); ?>
+  </body>
+</html>
+
+
