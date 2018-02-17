@@ -68,24 +68,54 @@ function doSearch() {
 function doReservation() {
   const $popin = $('[data-popin-reserver]');
   const roomName = $popin.find('[data-resa-room-name]').html();
-// TODO s'assurer de la reservabilité à date de fin avec 'jusque'
+
+  const heureDebut = $popin.find('[data-resa-heure-debut]').val();
+  const $champHeureFin = $popin.find('[data-resa-heure-fin]');
+  const heureMin = $champHeureFin.attr('min');
+  const heureMax = $champHeureFin.attr('max');
+  const heureFin = $champHeureFin.val();
   
-  gtag('event', 'do_resa', {
-    'roomName' : roomName,
-    'event_label' : roomName
-  });
+  if (isBefore(heureDebut, heureMin)) {
+    showMessage(`L'heure de début ne peut être inférieure à ${heureMin}`, true);
+  } else if (isBefore(heureMax, heureFin)) {
+    showMessage(`L'heure de fin ne peut être supérieure à ${heureMax}`, true);
+  } else if (isBefore(heureFin, heureDebut)) {
+    showMessage(`L'heure de debut ne peut être supérieure à l'heure de fin`, true);
+  } else {
+    gtag('event', 'do_resa', {
+      'roomName' : roomName,
+      'event_label' : roomName
+    });
   
-  google.script.run
-    .withSuccessHandler(onSalleReservee)
-    .withFailureHandler(onReservationError)
-    .reserver(
+    google.script.run
+      .withSuccessHandler(onSalleReservee)
+      .withFailureHandler(onReservationError)
+      .reserver(
         $popin.find('[data-do-resa]').attr('data-calId'),
         roomName,
         $popin.find('[data-resa-date]').html(),
-        $popin.find('[data-resa-heure-debut]').val(),
-        $popin.find('[data-resa-heure-fin]').val(),
+        heureDebut,
+        heureFin,
         $popin.find('[data-resa-objet]').val()
     );
+  }
+}
+
+/**
+ * Retourne true si date1 < date2
+ */
+function isBefore(date1, date2) {
+  const d1 = new Date();
+  const d1_arr = date1.split(':');
+  d1.setHours(d1_arr[0] + 1);
+  d1.setMinutes(d1_arr[1]);
+  
+  const d2 = new Date();
+  const d2_arr = date2.split(':');
+  d2.setHours(d2_arr[0] + 1);
+  d2.setMinutes(d2_arr[1]);
+  
+  return d1.getTime() < d2.getTime();
 }
 
 function onPullRefresh(done) {
