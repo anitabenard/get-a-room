@@ -75,7 +75,11 @@ function doReservation() {
   const heureMax = $champHeureFin.attr('max');
   const heureFin = $champHeureFin.val();
   
-  if (isBefore(heureDebut, heureMin)) {
+  if (!heureFin) {
+    showMessage(`L'heure de fin n'est pas valide`, true);
+  } else if (!heureDebut) {
+    showMessage(`L'heure de début n'est pas valide`, true);
+  } else if (isBefore(heureDebut, heureMin)) {
     showMessage(`L'heure de début ne peut être inférieure à ${heureMin}`, true);
   } else if (isBefore(heureMax, heureFin)) {
     showMessage(`L'heure de fin ne peut être supérieure à ${heureMax}`, true);
