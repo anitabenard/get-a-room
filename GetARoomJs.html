@@ -189,13 +189,14 @@ function showReservationPopin(addToCalButton) {
   
   const date = lastReq.date.split('-');
   $popin.find('[data-resa-date]').html(date[2] + '/' + date[1] + '/' + date[0]);
-  const heureDebut = lastReq.time;
-  const hmdebut = heureDebut.split(':');
+  const hmdebut = lastReq.time.split(':');
   const hDebut = new Date();
   hDebut.setHours(+hmdebut[0]+1);
   hDebut.setMinutes(hmdebut[1]);
-  $popin.find('[data-resa-heure-debut]').val(hDebut.toISOString().slice(0,-1).slice(11, 16));
   
+  const heureDebut = new Date();
+  heureDebut.setHours(+hmdebut[0]+1);
+  heureDebut.setMinutes(+hmdebut[1]);
   
   // init à +1h
   const plusUneHeure = new Date();
@@ -217,7 +218,15 @@ function showReservationPopin(addToCalButton) {
   
   let heureFin = plusUneHeure.getTime() > maxTime.getTime() ? maxTime : plusUneHeure;
   
-  $popin.find('[data-resa-heure-fin]').val(heureFin.toISOString().slice(0,-1).slice(11, 16));
+  const $champHeureDebut = $popin.find('[data-resa-heure-debut]');
+  $champHeureDebut.val(toHHmm(hDebut));
+  $champHeureDebut.attr('min', toHHmm(hDebut));
+  $champHeureDebut.attr('max', toHHmm(maxTime));
+  
+  $champHeureFin = $popin.find('[data-resa-heure-fin]');
+  $champHeureFin.val(toHHmm(heureFin));
+  $champHeureFin.attr('min', toHHmm(hDebut));
+  $champHeureFin.attr('max', toHHmm(maxTime));
   
   $popin.find('[data-do-resa]').attr('data-calId', $calId.attr('data-calId'));
   
@@ -227,6 +236,10 @@ function showReservationPopin(addToCalButton) {
   
   $('body').addClass('no-scroll');
   $popin.addClass("visible");
+}
+
+function toHHmm(uneDate) {
+  return uneDate.toISOString().slice(0,-1).slice(11, 16);
 }
 
 function updateDureeResa() {
