@@ -68,24 +68,58 @@ function doSearch() {
 function doReservation() {
   const $popin = $('[data-popin-reserver]');
   const roomName = $popin.find('[data-resa-room-name]').html();
-// TODO s'assurer de la reservabilité à date de fin avec 'jusque'
+
+  const heureDebut = $popin.find('[data-resa-heure-debut]').val();
+  const $champHeureFin = $popin.find('[data-resa-heure-fin]');
+  const heureMin = $champHeureFin.attr('min');
+  const heureMax = $champHeureFin.attr('max');
+  const heureFin = $champHeureFin.val();
   
-  gtag('event', 'do_resa', {
-    'roomName' : roomName,
-    'event_label' : roomName
-  });
+  if (!heureFin) {
+    showMessage(`L'heure de fin n'est pas valide`, true);
+  } else if (!heureDebut) {
+    showMessage(`L'heure de début n'est pas valide`, true);
+  } else if (isBefore(heureDebut, heureMin)) {
+    showMessage(`L'heure de début ne peut être inférieure à ${heureMin}`, true);
+  } else if (isBefore(heureMax, heureFin)) {
+    showMessage(`L'heure de fin ne peut être supérieure à ${heureMax}`, true);
+  } else if (isBefore(heureFin, heureDebut)) {
+    showMessage(`L'heure de debut ne peut être supérieure à l'heure de fin`, true);
+  } else {
+    gtag('event', 'do_resa', {
+      'roomName' : roomName,
+      'event_label' : roomName
+    });
   
-  google.script.run
-    .withSuccessHandler(onSalleReservee)
-    .withFailureHandler(onReservationError)
-    .reserver(
+    google.script.run
+      .withSuccessHandler(onSalleReservee)
+      .withFailureHandler(onReservationError)
+      .reserver(
         $popin.find('[data-do-resa]').attr('data-calId'),
         roomName,
         $popin.find('[data-resa-date]').html(),
-        $popin.find('[data-resa-heure-debut]').val(),
-        $popin.find('[data-resa-heure-fin]').val(),
+        heureDebut,
+        heureFin,
         $popin.find('[data-resa-objet]').val()
     );
+  }
+}
+
+/**
+ * Retourne true si date1 < date2
+ */
+function isBefore(date1, date2) {
+  const d1 = new Date();
+  const d1_arr = date1.split(':');
+  d1.setHours(d1_arr[0] + 1);
+  d1.setMinutes(d1_arr[1]);
+  
+  const d2 = new Date();
+  const d2_arr = date2.split(':');
+  d2.setHours(d2_arr[0] + 1);
+  d2.setMinutes(d2_arr[1]);
+  
+  return d1.getTime() < d2.getTime();
 }
 
 function onPullRefresh(done) {
@@ -137,7 +171,7 @@ function showData(res) {
       const cal = res.free[i];
       $freeCalendars.append(
       `<div class="card type-${cal[3]}">
-          <span><span data-calId="${cal[1]}" class="nom-salle">${cal[0]}</span><br/>jusque ${cal[4]}</span>
+          <span><span data-calId="${cal[1]}" class="nom-salle">${cal[0]}</span><br/>jusque <span data-time-max>${cal[4]}</span></span>
           <img data-add-to-cal src="data:image/svg+xml;utf8;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iaXNvLTg4NTktMSI/Pgo8IS0tIEdlbmVyYXRvcjogQWRvYmUgSWxsdXN0cmF0b3IgMTYuMC4wLCBTVkcgRXhwb3J0IFBsdWctSW4gLiBTVkcgVmVyc2lvbjogNi4wMCBCdWlsZCAwKSAgLS0+CjwhRE9DVFlQRSBzdmcgUFVCTElDICItLy9XM0MvL0RURCBTVkcgMS4xLy9FTiIgImh0dHA6Ly93d3cudzMub3JnL0dyYXBoaWNzL1NWRy8xLjEvRFREL3N2ZzExLmR0ZCI+CjxzdmcgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB4bWxuczp4bGluaz0iaHR0cDovL3d3dy53My5vcmcvMTk5OS94bGluayIgdmVyc2lvbj0iMS4xIiBpZD0iQ2FwYV8xIiB4PSIwcHgiIHk9IjBweCIgd2lkdGg9IjMycHgiIGhlaWdodD0iMzJweCIgdmlld0JveD0iMCAwIDQ4NS4yMTMgNDg1LjIxMiIgc3R5bGU9ImVuYWJsZS1iYWNrZ3JvdW5kOm5ldyAwIDAgNDg1LjIxMyA0ODUuMjEyOyIgeG1sOnNwYWNlPSJwcmVzZXJ2ZSI+CjxnPgoJPHBhdGggZD0iTTYwLjY1Miw3NS44MTZWMTUuMTYzQzYwLjY1Miw2Ljc4MSw2Ny40MzMsMCw3NS44MTcsMGM4LjM4LDAsMTUuMTYxLDYuNzgxLDE1LjE2MSwxNS4xNjN2NjAuNjUzICAgYzAsOC4zOC02Ljc4MSwxNS4xNjEtMTUuMTYxLDE1LjE2MUM2Ny40MzMsOTAuOTc4LDYwLjY1Miw4NC4xOTYsNjAuNjUyLDc1LjgxNnogTTMxOC40MjQsOTAuOTc4ICAgYzguMzc4LDAsMTUuMTYzLTYuNzgxLDE1LjE2My0xNS4xNjFWMTUuMTYzQzMzMy41ODcsNi43ODEsMzI2LjgwMiwwLDMxOC40MjQsMGMtOC4zODIsMC0xNS4xNjgsNi43ODEtMTUuMTY4LDE1LjE2M3Y2MC42NTMgICBDMzAzLjI1Niw4NC4xOTYsMzEwLjA0Miw5MC45NzgsMzE4LjQyNCw5MC45Nzh6IE00ODUuMjEyLDM2My45MDZjMCw2Ni45OTYtNTQuMzEyLDEyMS4zMDctMTIxLjMwMywxMjEuMzA3ICAgYy02Ni45ODYsMC0xMjEuMzAyLTU0LjMxMS0xMjEuMzAyLTEyMS4zMDdjMC02Ni45ODYsNTQuMzE1LTEyMS4zLDEyMS4zMDItMTIxLjNDNDMwLjksMjQyLjYwNiw0ODUuMjEyLDI5Ni45MTksNDg1LjIxMiwzNjMuOTA2eiAgICBNNDU0Ljg5LDM2My45MDZjMC01MC4xNjEtNDAuODEtOTAuOTc2LTkwLjk4LTkwLjk3NmMtNTAuMTY2LDAtOTAuOTc2LDQwLjgxNC05MC45NzYsOTAuOTc2YzAsNTAuMTcxLDQwLjgxLDkwLjk4LDkwLjk3Niw5MC45OCAgIEM0MTQuMDgsNDU0Ljg4Niw0NTQuODksNDE0LjA3Nyw0NTQuODksMzYzLjkwNnogTTEyMS4zMDUsMTgxLjk1NUg2MC42NTJ2NjAuNjUxaDYwLjY1M1YxODEuOTU1eiBNNjAuNjUyLDMzMy41ODRoNjAuNjUzVjI3Mi45MyAgIEg2MC42NTJWMzMzLjU4NHogTTE1MS42MjksMjQyLjYwNmg2MC42NTR2LTYwLjY1MWgtNjAuNjU0VjI0Mi42MDZ6IE0xNTEuNjI5LDMzMy41ODRoNjAuNjU0VjI3Mi45M2gtNjAuNjU0VjMzMy41ODR6ICAgIE0zMC4zMjgsMzYwLjg5MVYxNTEuNjI4aDMzMy41ODJ2NjAuNjUzaDMwLjMyN1Y5NGMwLTE4LjQyMS0xNC42OTItMzMuMzQ5LTMyLjg0My0zMy4zNDloLTEyLjY0N3YxNS4xNjYgICBjMCwxNi43MDEtMTMuNTk2LDMwLjMyNS0zMC4zMjIsMzAuMzI1Yy0xNi43MzEsMC0zMC4zMjYtMTMuNjI0LTMwLjMyNi0zMC4zMjVWNjAuNjUxSDEwNi4xNHYxNS4xNjYgICBjMCwxNi43MDEtMTMuNTkzLDMwLjMyNS0zMC4zMjIsMzAuMzI1Yy0xNi43MzMsMC0zMC4zMjctMTMuNjI0LTMwLjMyNy0zMC4zMjVWNjAuNjUxSDMyLjg1OUMxNC43MDcsNjAuNjUxLDAuMDAxLDc1LjU3OSwwLjAwMSw5NCAgIHYyNjYuODkyYzAsMTguMzYsMTQuNzA2LDMzLjM0NiwzMi44NTgsMzMuMzQ2aDE3OS40MjR2LTMwLjMzMUgzMi44NTlDMzEuNDg1LDM2My45MDYsMzAuMzI4LDM2Mi40ODcsMzAuMzI4LDM2MC44OTF6ICAgIE0zMDMuMjU2LDI0Mi42MDZ2LTYwLjY1MWgtNjAuNjQ4djYwLjY1MUgzMDMuMjU2eiBNNDI4LjIzMSwzMzQuMzU5Yy01LjkyMy01LjkyOC0xNS41MTktNS45MjgtMjEuNDM3LDBsLTUzLjYwMiw1My42MDIgICBsLTMyLjE3LTMyLjE2NmMtNS45MjMtNS45MjMtMTUuNTE4LTUuOTIzLTIxLjQ0LDBzLTUuOTIzLDE1LjUxOSwwLDIxLjQ0bDQyLjg4Niw0Mi44ODZjMi45NTksMi45NTksNi44NDIsNC40MzgsMTAuNzI1LDQuNDM4ICAgYzMuODc0LDAsNy43NTMtMS40NzksMTAuNzE2LTQuNDM4bDY0LjMyMi02NC4zMjZDNDM0LjE1MywzNDkuODcyLDQzNC4xNTMsMzQwLjI4Miw0MjguMjMxLDMzNC4zNTl6IiBmaWxsPSIjRkZGRkZGIi8+CjwvZz4KPGc+CjwvZz4KPGc+CjwvZz4KPGc+CjwvZz4KPGc+CjwvZz4KPGc+CjwvZz4KPGc+CjwvZz4KPGc+CjwvZz4KPGc+CjwvZz4KPGc+CjwvZz4KPGc+CjwvZz4KPGc+CjwvZz4KPGc+CjwvZz4KPGc+CjwvZz4KPGc+CjwvZz4KPGc+CjwvZz4KPC9zdmc+Cg==" />
        </div>`);
     }
@@ -180,22 +214,26 @@ function showData(res) {
 }
 
 function showReservationPopin(addToCalButton) {
-  $calId = $(addToCalButton).parent().find('[data-calId]');
+  const $roomCard = $(addToCalButton).parent();
+  const $calId = $roomCard.find('[data-calId]');
+  const timeMax = $roomCard.find('[data-time-max]').text().split(':');
 
   const $popin = $('[data-popin-reserver]');
   $popin.find('[data-resa-room-name]').html($calId.html());
   
   const date = lastReq.date.split('-');
   $popin.find('[data-resa-date]').html(date[2] + '/' + date[1] + '/' + date[0]);
-  const heureDebut = lastReq.time;
-  const hmdebut = heureDebut.split(':');
+  const hmdebut = lastReq.time.split(':');
   const hDebut = new Date();
   hDebut.setHours(+hmdebut[0]+1);
   hDebut.setMinutes(hmdebut[1]);
-  $popin.find('[data-resa-heure-debut]').val(hDebut.toISOString().slice(0,-1).slice(11, 16));
+  
+  const heureDebut = new Date();
+  heureDebut.setHours(+hmdebut[0]+1);
+  heureDebut.setMinutes(+hmdebut[1]);
   
   // init à +1h
-  var plusUneHeure = new Date();
+  const plusUneHeure = new Date();
   // 10:14 -> 10:00 ; 10h16 -> 10h30 ; 10h46 -> 11h00
   const minFin = +hmdebut[1];
   if (minFin < 15) {
@@ -208,7 +246,21 @@ function showReservationPopin(addToCalButton) {
     plusUneHeure.setHours(+hmdebut[0]+3);
     plusUneHeure.setMinutes(0);
   }
-  $popin.find('[data-resa-heure-fin]').val(plusUneHeure.toISOString().slice(0,-1).slice(11, 16));
+  const maxTime = new Date();
+  maxTime.setHours(+timeMax[0]+1);
+  maxTime.setMinutes(+timeMax[1]);
+  
+  let heureFin = plusUneHeure.getTime() > maxTime.getTime() ? maxTime : plusUneHeure;
+  
+  const $champHeureDebut = $popin.find('[data-resa-heure-debut]');
+  $champHeureDebut.val(toHHmm(hDebut));
+  $champHeureDebut.attr('min', toHHmm(hDebut));
+  $champHeureDebut.attr('max', toHHmm(maxTime));
+  
+  $champHeureFin = $popin.find('[data-resa-heure-fin]');
+  $champHeureFin.val(toHHmm(heureFin));
+  $champHeureFin.attr('min', toHHmm(hDebut));
+  $champHeureFin.attr('max', toHHmm(maxTime));
   
   $popin.find('[data-do-resa]').attr('data-calId', $calId.attr('data-calId'));
   
@@ -218,6 +270,10 @@ function showReservationPopin(addToCalButton) {
   
   $('body').addClass('no-scroll');
   $popin.addClass("visible");
+}
+
+function toHHmm(uneDate) {
+  return uneDate.toISOString().slice(0,-1).slice(11, 16);
 }
 
 function updateDureeResa() {
